@@ -182,6 +182,7 @@ export default class Request extends Duplex implements RequestEvents<Request> {
 
 	// We need this because `this._request` if `undefined` when using cache
 	private _requestInitialized: boolean;
+	private readonly _removeListeners: () => void;
 
 	constructor(url: UrlType, options?: OptionsType, defaults?: DefaultsType) {
 		super({
@@ -200,6 +201,7 @@ export default class Request extends Duplex implements RequestEvents<Request> {
 		this._triggerRead = false;
 		this._cancelTimeouts = noop;
 		this._jobs = [];
+		this._removeListeners = noop;
 		this._flushed = false;
 		this._requestInitialized = false;
 		this._aborted = false;
@@ -251,9 +253,14 @@ export default class Request extends Duplex implements RequestEvents<Request> {
 			this.destroy(new AbortError(this));
 		}
 
-		this.options.signal?.addEventListener('abort', () => {
+		const abort = () => {
 			this.destroy(new AbortError(this));
-		});
+		};
+
+		this.options.signal?.addEventListener('abort', abort);
+		this._removeListeners = () => {
+			this.options.signal?.removeEventListener('abort', abort);
+		};
 
 		// Important! If you replace `body` in a handler with another stream, make sure it's readable first.
 		// The below is run only once.
@@ -508,6 +515,7 @@ export default class Request extends Duplex implements RequestEvents<Request> {
 		// Prevent further retries
 		this._stopRetry();
 		this._cancelTimeouts();
+		this._removeListeners();
 
 		if (this.options) {
 			const {body} = this.options;
